@@ -92,7 +92,7 @@ def csv(args, scopeData, outfile):
             fields.append("%0.5e" % scopeData["channel"][channel]["samples"]["time"][i])
         for channel in channels:
             sampleDict = scopeData["channel"][channel]["samples"]
-            fields.append(dataFmt % (1 if sampleDict[dataSrc][i] > 128 else 0))
+            fields.append(dataFmt % sampleDict[dataSrc][i])
         csvWrite(fields, outfile)
 
 
