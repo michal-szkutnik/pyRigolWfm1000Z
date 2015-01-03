@@ -47,7 +47,18 @@ def _parseFile(f, description, leading="<", strict = True):
   
   data = collections.OrderedDict()
   
-  for field, t, test in description:
+  for field, t, test, *optionals in description:
+    optionals = optionals[0] if len(optionals) > 0 else {}
+
+    if "if" in optionals:
+      fieldTested, condition, match = optionals["if"]
+
+      assert condition  in ("==", ">=", "<=", "<", ">", "in", "!=")
+      doParse = eval("data[fieldTested] %s match" % condition)
+      if not doParse:
+        continue
+
+
     if t == "nested":
       data[field] = _parseFile(f, test, leading)
     else:
@@ -56,11 +67,16 @@ def _parseFile(f, description, leading="<", strict = True):
       value = struct.unpack(binary_format, tmp)[0]
       data[field] = value
       
+      if "transform" in optionals:
+        transform = optionals["transform"]
+        assert callable(transform)
+        data[field] = transform(data[field])
+
       if test:
         scope, condition, match = test
         
         assert scope in ("expect", "require")
-        assert condition  in ("==", ">=", "<=", "<", ">", "in")
+        assert condition  in ("==", ">=", "<=", "<", ">", "in", "!=")
         matches = eval("value %s match" % condition)
         
         if not matches and scope == "require":
@@ -126,7 +142,7 @@ def parseRigolWFM(f, strict=True):
     ("unknown3",  "10s", None),
     ("probeAttenTimesRange",  "q", None),
     ("unknown4",  "16s", None),
-    ("label",     "4s", None),
+    ("label",     "4s", None, { "transform": decodeNullTerminatedStr }),
     ("unknown5",  "10s", None),
   )
 
@@ -134,14 +150,14 @@ def parseRigolWFM(f, strict=True):
     ("unknown1",    "H",   ("require", "==", 0xFF01)),
     ("unknown2",    "6s",  None),
     
-    ("model",      "20s",  None),
-    ("fwVersion",  "20s",   None),
+    ("model",      "20s",  None, { "transform": decodeNullTerminatedStr }),
+    ("fwVersion",  "20s",   None, { "transform": decodeNullTerminatedStr }),
     ("unknown3",   "16s",   None),
 
     ("scaleD",       "q", None),
-    ("triggerDelay", "q", None),
+    ("timeDelay", "q", None),
     ("unknown4",     "40s", None),
-    ("smpRate",      "f", ("require", ">=", 0)),
+    ("smpRate",      "f", ("require", ">=", 0), { "transform": lambda x: x * 1e9 }),
 
     ("channel1", "nested", chan_header),
 
@@ -152,17 +168,14 @@ def parseRigolWFM(f, strict=True):
     ("channel4", "nested", chan_header),
 
     ("unknown5", "1759s", None),
+    ("unknown5.1", "40s", None, { "if" : ("fwVersion", "!=", "00.04.01.SP2") }),
 
     ("channel4_head2", "nested", chan_header2),
     ("channel3_head2", "nested", chan_header2),
     ("channel2_head2", "nested", chan_header2),
     ("channel1_head2", "nested", chan_header2),
 
-    ("unknown6", "319s", None),
-
-    ("sampleCount", "L",  ("require", ">=", 0)),
-
-    ("unknown7", "152s", None),
+    ("unknown6", "475s", None),
 
     ("ch1Range", "L",  ("require", ">=", 0)),
     ("ch2Range", "L",  ("require", ">=", 0)),
@@ -174,7 +187,13 @@ def parseRigolWFM(f, strict=True):
     ("ch3Shift", "q",  None),
     ("ch4Shift", "q",  None),
 
-    ("unknown8", "400s", None),
+    ("unknown7", "248s", None, { "if" : ("fwVersion", "!=", "00.04.01.SP2") }),
+    ("unknown7", "244s", None, { "if" : ("fwVersion", "==", "00.04.01.SP2") }),
+
+    ("sampleCount", "L",  ("require", ">=", 0)),
+
+    ("unknown8", "148s", None, { "if" : ("fwVersion", "!=", "00.04.01.SP2") }),
+    ("unknown8", "152s", None, { "if" : ("fwVersion", "==", "00.04.01.SP2") }),
   )
 
   fileHdr = _parseFile(f, wfm_header, strict=strict)
@@ -210,11 +229,11 @@ def parseRigolWFM(f, strict=True):
 
   scopeData = dict()
 
-  scopeData['model'] = decodeNullTerminatedStr(fileHdr['model'])
-  scopeData['fwVersion'] = decodeNullTerminatedStr(fileHdr['fwVersion'])
+  scopeData['model'] = fileHdr['model']
+  scopeData['fwVersion'] = fileHdr['fwVersion']
   scopeData['scaleD'] = fileHdr['scaleD']
-  scopeData['triggerDelay'] = fileHdr['triggerDelay']
-  scopeData["samplerate"] = fileHdr["smpRate"] * 1e9
+  scopeData['timeDelay'] = fileHdr['timeDelay']
+  scopeData["samplerate"] = fileHdr["smpRate"]
   scopeData["timeScale"] = 1./scopeData["samplerate"]
   scopeData['enabledChannels'] = fileHdr['enabledChannels']
   scopeData['enabledChannelsCount'] = fileHdr['enabledChannelsCount']
@@ -224,7 +243,7 @@ def parseRigolWFM(f, strict=True):
     channelDict = dict()
     channelDict["enabled"] = fileHdr["channels"][channel]["enabled"]
 
-    channelDict["label"] = decodeNullTerminatedStr(fileHdr["channels2"][channel]["label"])
+    channelDict["label"] = fileHdr["channels2"][channel]["label"]
 
     channelDict["channelName"] = "CH" + str(channel+1)
 
@@ -247,9 +266,9 @@ def parseRigolWFM(f, strict=True):
       samples = len(channelDict["samples"]["raw"])
       channelDict["nsamples"] = samples
 
-      channelDict["samplerate"] = fileHdr["smpRate"] * 1e9
+      channelDict["samplerate"] = fileHdr["smpRate"]
       channelDict["timeScale"] = 1./channelDict["samplerate"]
-      channelDict["timeDelay"] = 1e-12 * fileHdr["triggerDelay"]
+      channelDict["timeDelay"] = 1e-12 * fileHdr["timeDelay"]
 
       channelDict["samples"]["time"] = [
         (t - samples/2) * channelDict["timeScale"] + channelDict["timeDelay"]
@@ -282,7 +301,7 @@ def describeScopeData(scopeData):
     ('model'           , ("Device model", "%s")),
     ('fwVersion'       , ("Firmware version", "%s")),
     ('scaleD'          , ("Horizontal scale", "%d ps")),
-    ('triggerDelay'    , ("Trigger delay", "%d ps")),
+    ('timeDelay'       , ("Time delay", "%d ps")),
     ('samplerate'         , ("Sampling rate", "%e samples/s")),
     ('enabledChannels'         , ("Enabled channels", "%s (zero-based indexes)")),
     )
