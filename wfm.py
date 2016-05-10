@@ -168,7 +168,8 @@ def parseRigolWFM(f, strict=True):
     ("channel4", "nested", chan_header),
 
     ("unknown5", "1759s", None),
-    ("unknown5.1", "40s", None, { "if" : ("fwVersion", "!=", "00.04.01.SP2") }),
+    ("unknown5.1", "40s", None, { "if": ("fwVersion", "==", "00.04.02.SP4") }),
+    ("unknown5.1", "55s", None, { "if": ("fwVersion", "==", "00.04.03.SP2")}),
 
     ("channel4_head2", "nested", chan_header2),
     ("channel3_head2", "nested", chan_header2),

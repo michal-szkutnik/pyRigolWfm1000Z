@@ -2,7 +2,7 @@
 
 *Important! This library can not calculate correct voltage values from raw data. I could not (yet?) locate all the data necessary to do that in the WFM files. Use --raw parameter to use raw data for plots and CSV files. Any help with file format is welcome!*
 
-*Important! WFM file format differs with firmware versions, 00.04.01.SP2 and 00.04.02.SP4 (the most recent when writing this on 03/01/2015 which fixes jitter issues) are currently supported, others are untested.*
+*Important! WFM file format differs with firmware versions, 00.04.01.SP2, 00.04.02.SP4 and 00.04.03.SP2 are currently supported, others are untested.*
 
 These scripts are based on the [pyRigolWFM](https://github.com/mabl/pyRigolWFM) by Matthias Blaicher and my reverse engineering of Rigol DS1054Z WFM files.
 They include a library for reading DS1000Z WFM files and extracting some basic data from them and a utility for plotting and conversion of the WFM file data to other formats.
